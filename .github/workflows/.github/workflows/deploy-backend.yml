@@ -33,7 +33,6 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          enable-AzPSSession: true
 
       - name: Set Kubernetes context
         run: |
@@ -62,9 +61,7 @@ jobs:
           for i in $(seq 1 60); do
             PRODUCT_IP=$(kubectl get svc product-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
             ORDER_IP=$(kubectl get svc order-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-            if [[ -n "$PRODUCT_IP" && -n "$ORDER_IP" ]]; then
-              break
-            fi
+            if [[ -n "$PRODUCT_IP" && -n "$ORDER_IP" ]]; then break; fi
             sleep 5
           done
 
@@ -101,11 +98,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set ACR name environment variable
-        run: echo "ACR_NAME=${{ github.event.inputs.aks_acr_name }}" >> $GITHUB_ENV
-
+      # ✅ Correct login step: pass the ACR name directly from workflow input
       - name: Login to Azure Container Registry
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: az acr login --name ${{ github.event.inputs.aks_acr_name }}
 
       - name: Inject Backend IPs
         run: |
@@ -114,8 +109,8 @@ jobs:
 
       - name: Build & Push Frontend Image
         run: |
-          docker build -t ${{ env.ACR_NAME }}.azurecr.io/frontend:latest ./frontend/
-          docker push ${{ env.ACR_NAME }}.azurecr.io/frontend:latest
+          docker build -t ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest ./frontend/
+          docker push ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
