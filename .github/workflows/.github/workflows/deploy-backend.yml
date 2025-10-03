@@ -36,15 +36,17 @@ jobs:
 
       - name: Set Kubernetes context
         run: |
-          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} \
-                                 --name ${{ github.event.inputs.aks_cluster_name }} \
-                                 --overwrite-existing
+          az aks get-credentials \
+            --resource-group ${{ github.event.inputs.aks_resource_group }} \
+            --name ${{ github.event.inputs.aks_cluster_name }} \
+            --overwrite-existing
 
       - name: Attach ACR to AKS
         run: |
-          az aks update --name ${{ github.event.inputs.aks_cluster_name }} \
-                        --resource-group ${{ github.event.inputs.aks_resource_group }} \
-                        --attach-acr ${{ github.event.inputs.aks_acr_name }}
+          az aks update \
+            --name ${{ github.event.inputs.aks_cluster_name }} \
+            --resource-group ${{ github.event.inputs.aks_resource_group }} \
+            --attach-acr ${{ github.event.inputs.aks_acr_name }}
 
       - name: Deploy Backend
         run: |
@@ -98,9 +100,16 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # ✅ Correct login step: pass the ACR name directly from workflow input
+      # ✅ Login to ACR safely using workflow input or fallback to secret
       - name: Login to Azure Container Registry
-        run: az acr login --name ${{ github.event.inputs.aks_acr_name }}
+        run: |
+          ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
+          if [[ -z "$ACR_NAME" ]]; then
+            echo "Workflow input ACR name is empty. Using secret ACR_NAME instead."
+            ACR_NAME="${{ secrets.ACR_NAME }}"
+          fi
+          echo "Logging in to ACR: $ACR_NAME"
+          az acr login --name "$ACR_NAME"
 
       - name: Inject Backend IPs
         run: |
@@ -109,8 +118,10 @@ jobs:
 
       - name: Build & Push Frontend Image
         run: |
-          docker build -t ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest ./frontend/
-          docker push ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest
+          IMAGE_TAG="latest"
+          ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
+          docker build -t "$ACR_NAME.azurecr.io/frontend:$IMAGE_TAG" ./frontend/
+          docker push "$ACR_NAME.azurecr.io/frontend:$IMAGE_TAG"
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
