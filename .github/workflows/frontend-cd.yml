@@ -18,11 +18,14 @@ on:
         required: true
         default: '<acr_name>'
 
+env:
+  # Dynamic image tag based on commit and run ID
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
+
 jobs:
   deploy_backend:
     runs-on: ubuntu-latest
     environment: Production
-    
     outputs:
       PRODUCT_API_IP: ${{ steps.get_product_ip.outputs.external_ip }}
       ORDER_API_IP: ${{ steps.get_order_ip.outputs.external_ip }}
@@ -35,38 +38,47 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          enable-AzPSSession: true
 
       - name: Set Kubernetes context (get AKS credentials)
         run: |
-          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} --name ${{ github.event.inputs.aks_cluster_name }} --overwrite-existing
+          az aks get-credentials \
+            --resource-group ${{ github.event.inputs.aks_resource_group }} \
+            --name ${{ github.event.inputs.aks_cluster_name }} \
+            --overwrite-existing
 
-      - name: Attach ACR
+      - name: Attach ACR to AKS
         run: |
-          az aks update --name ${{ github.event.inputs.aks_cluster_name }} --resource-group ${{ github.event.inputs.aks_resource_group }} --attach-acr ${{ github.event.inputs.aks_acr_name }}
+          az aks update \
+            --name ${{ github.event.inputs.aks_cluster_name }} \
+            --resource-group ${{ github.event.inputs.aks_resource_group }} \
+            --attach-acr ${{ github.event.inputs.aks_acr_name }}
 
       - name: Deploy Backend Infrastructure (Namespace, ConfigMaps, Secrets, Databases)
         run: |
           cd k8s/
-          kubectl apply -f configmaps.yaml
-          kubectl apply -f secrets.yaml
-          kubectl apply -f product-db.yaml
-          kubectl apply -f order-db.yaml
+          kubectl apply -f configmaps.yaml -n ecommerce
+          kubectl apply -f secrets.yaml -n ecommerce
+          kubectl apply -f product-db.yaml -n ecommerce
+          kubectl apply -f order-db.yaml -n ecommerce
 
       - name: Deploy Backend Microservices (Product, Order)
         run: |
           cd k8s/
-          kubectl apply -f product-service.yaml
-          kubectl apply -f order-service.yaml
+          kubectl apply -f product-service.yaml -n ecommerce
+          kubectl apply -f order-service.yaml -n ecommerce
 
       - name: Wait for Backend LoadBalancer IPs
         run: |
+          echo "Waiting for Product & Order LoadBalancer IPs (up to 5 minutes)..."
           PRODUCT_IP=""
           ORDER_IP=""
           for i in $(seq 1 60); do
+            echo "Attempt $i/60: Checking IPs..."
             PRODUCT_IP=$(kubectl get service product-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
             ORDER_IP=$(kubectl get service order-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
             if [[ -n "$PRODUCT_IP" && -n "$ORDER_IP" ]]; then
+              echo "Product IP: $PRODUCT_IP"
+              echo "Order IP: $ORDER_IP"
               break
             fi
             sleep 5
@@ -114,8 +126,8 @@ jobs:
 
       - name: Build and Push Frontend Image
         run: |
-          docker build -t ${{ github.event.inputs.aks_acr_name }}/frontend:latest ./frontend/
-          docker push ${{ github.event.inputs.aks_acr_name }}/frontend:latest
+          docker build -t ${{ github.event.inputs.aks_acr_name }}/frontend:${{ env.IMAGE_TAG }} ./frontend/
+          docker push ${{ github.event.inputs.aks_acr_name }}/frontend:${{ env.IMAGE_TAG }}
 
       - name: Set Kubernetes context (get AKS credentials)
         uses: azure/aks-set-context@v3
@@ -126,7 +138,7 @@ jobs:
       - name: Deploy Frontend to AKS
         run: |
           cd k8s/
-          kubectl apply -f frontend.yaml
+          kubectl apply -f frontend.yaml -n ecommerce
 
       - name: Logout from Azure
         run: az logout
