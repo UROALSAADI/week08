@@ -92,8 +92,11 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Debug: Show ACR Name
+        run: echo "ACR Name: ${{ github.event.inputs.aks_acr_name }}"
+
       - name: Login to Azure Container Registry
-        run: az acr login --name uroalsaadiweek09acr
+        run: az acr login --name ${{ github.event.inputs.aks_acr_name }}
 
       - name: Inject Backend IPs
         run: |
@@ -102,14 +105,14 @@ jobs:
 
       - name: Build & Push Frontend Image
         run: |
-          docker build -t uroalsaadiweek09acr.azurecr.io/frontend:latest ./frontend/
-          docker push uroalsaadiweek09acr.azurecr.io/frontend:latest
+          docker build -t ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest ./frontend/
+          docker push ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
         with:
-          resource-group: week09-rg
-          cluster-name: week09-aks
+          resource-group: ${{ github.event.inputs.aks_resource_group }}
+          cluster-name: ${{ github.event.inputs.aks_cluster_name }}
 
       - name: Deploy Frontend to AKS
         run: |
