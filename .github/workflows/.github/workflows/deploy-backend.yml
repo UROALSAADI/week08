@@ -13,7 +13,7 @@ on:
         required: true
         default: '<resource_group_name>'
       aks_acr_name:
-        description: 'Name of ACR'
+        description: 'Name of Azure Container Registry'
         required: true
         default: 'uroalsaadiweek09acr'
 
@@ -36,17 +36,15 @@ jobs:
 
       - name: Set Kubernetes context
         run: |
-          az aks get-credentials \
-            --resource-group ${{ github.event.inputs.aks_resource_group }} \
-            --name ${{ github.event.inputs.aks_cluster_name }} \
-            --overwrite-existing
+          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} \
+                                 --name ${{ github.event.inputs.aks_cluster_name }} \
+                                 --overwrite-existing
 
       - name: Attach ACR to AKS
         run: |
-          az aks update \
-            --name ${{ github.event.inputs.aks_cluster_name }} \
-            --resource-group ${{ github.event.inputs.aks_resource_group }} \
-            --attach-acr ${{ github.event.inputs.aks_acr_name }}
+          az aks update --name ${{ github.event.inputs.aks_cluster_name }} \
+                        --resource-group ${{ github.event.inputs.aks_resource_group }} \
+                        --attach-acr ${{ github.event.inputs.aks_acr_name }}
 
       - name: Deploy Backend
         run: |
@@ -100,15 +98,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # ✅ Login to ACR safely using workflow input or fallback to secret
       - name: Login to Azure Container Registry
         run: |
           ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
           if [[ -z "$ACR_NAME" ]]; then
-            echo "Workflow input ACR name is empty. Using secret ACR_NAME instead."
-            ACR_NAME="${{ secrets.ACR_NAME }}"
+            echo "Error: ACR name is empty. Please set aks_acr_name input or ACR_NAME secret."
+            exit 1
           fi
-          echo "Logging in to ACR: $ACR_NAME"
           az acr login --name "$ACR_NAME"
 
       - name: Inject Backend IPs
@@ -118,10 +114,8 @@ jobs:
 
       - name: Build & Push Frontend Image
         run: |
-          IMAGE_TAG="latest"
-          ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
-          docker build -t "$ACR_NAME.azurecr.io/frontend:$IMAGE_TAG" ./frontend/
-          docker push "$ACR_NAME.azurecr.io/frontend:$IMAGE_TAG"
+          docker build -t ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest ./frontend/
+          docker push ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
