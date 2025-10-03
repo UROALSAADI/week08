@@ -21,10 +21,10 @@ jobs:
   deploy_backend:
     runs-on: ubuntu-latest
     environment: Production
+
     outputs:
       PRODUCT_API_IP: ${{ steps.get_product_ip.outputs.external_ip }}
       ORDER_API_IP: ${{ steps.get_order_ip.outputs.external_ip }}
-      ACR_NAME: ${{ github.event.inputs.aks_acr_name }}  # Pass ACR to frontend
 
     steps:
       - name: Checkout repository
@@ -98,8 +98,9 @@ jobs:
     needs: deploy_backend
     runs-on: ubuntu-latest
     environment: Production
+
     env:
-      ACR_NAME: ${{ needs.deploy_backend.outputs.ACR_NAME }}  # <-- Fixed here
+      ACR_NAME: uroalsaadiweek09acr  # <-- fixed: ACR name explicitly defined
 
     steps:
       - name: Checkout repository
@@ -111,7 +112,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login to Azure Container Registry
-        run: az acr login --name $ACR_NAME  # Now this has a proper value
+        run: az acr login --name $ACR_NAME  # <-- now guaranteed to have value
 
       - name: Inject Backend IPs into Frontend main.js
         run: |
