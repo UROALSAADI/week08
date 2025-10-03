@@ -40,12 +40,6 @@ jobs:
                                  --name ${{ github.event.inputs.aks_cluster_name }} \
                                  --overwrite-existing
 
-      - name: Attach ACR to AKS
-        run: |
-          az aks update --name ${{ github.event.inputs.aks_cluster_name }} \
-                        --resource-group ${{ github.event.inputs.aks_resource_group }} \
-                        --attach-acr ${{ github.event.inputs.aks_acr_name }}
-
       - name: Deploy Backend
         run: |
           cd k8s/
