@@ -15,7 +15,7 @@ on:
       aks_acr_name:
         description: 'Name of ACR'
         required: true
-        default: 'uroalsaadiweek09acr'
+        default: 'uroalsaadiweek09acr'  # Your ACR name
 
 jobs:
   deploy_backend:
