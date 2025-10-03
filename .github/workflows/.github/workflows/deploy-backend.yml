@@ -99,9 +99,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
 
-    env:
-      ACR_NAME: uroalsaadiweek09acr  # <-- fixed: ACR name explicitly defined
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -112,7 +109,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login to Azure Container Registry
-        run: az acr login --name $ACR_NAME  # <-- now guaranteed to have value
+        run: az acr login --name uroalsaadiweek09acr  # FIXED: Using actual ACR name
 
       - name: Inject Backend IPs into Frontend main.js
         run: |
@@ -123,8 +120,8 @@ jobs:
 
       - name: Build and Push Frontend Image
         run: |
-          docker build -t $ACR_NAME.azurecr.io/frontend:latest ./frontend/
-          docker push $ACR_NAME.azurecr.io/frontend:latest
+          docker build -t uroalsaadiweek09acr.azurecr.io/frontend:latest ./frontend/
+          docker push uroalsaadiweek09acr.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context (get AKS credentials)
         uses: azure/aks-set-context@v3
