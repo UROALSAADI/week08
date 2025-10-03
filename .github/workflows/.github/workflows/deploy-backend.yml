@@ -15,7 +15,7 @@ on:
       aks_acr_name:
         description: 'Name of ACR'
         required: true
-        default: 'uroalsaadiweek09acr'  # Your ACR name
+        default: 'uroalsaadiweek09acr'
 
 jobs:
   deploy_backend:
@@ -27,8 +27,7 @@ jobs:
       ORDER_API_IP: ${{ steps.get_order_ip.outputs.external_ip }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Log in to Azure
         uses: azure/login@v1
@@ -36,7 +35,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: true
 
-      - name: Set Kubernetes context (get AKS credentials)
+      - name: Set Kubernetes context
         run: |
           az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} \
                                  --name ${{ github.event.inputs.aks_cluster_name }} \
@@ -48,23 +47,18 @@ jobs:
                         --resource-group ${{ github.event.inputs.aks_resource_group }} \
                         --attach-acr ${{ github.event.inputs.aks_acr_name }}
 
-      - name: Deploy Backend Infrastructure (Namespace, ConfigMaps, Secrets, Databases)
+      - name: Deploy Backend
         run: |
           cd k8s/
           kubectl apply -f configmaps.yaml -n ecommerce
           kubectl apply -f secrets.yaml -n ecommerce
           kubectl apply -f product-db.yaml -n ecommerce
           kubectl apply -f order-db.yaml -n ecommerce
-
-      - name: Deploy Backend Microservices (Product, Order)
-        run: |
-          cd k8s/
           kubectl apply -f product-service.yaml -n ecommerce
           kubectl apply -f order-service.yaml -n ecommerce
 
       - name: Wait for Backend LoadBalancer IPs
         run: |
-          echo "Waiting for Product & Order LoadBalancer IPs..."
           for i in $(seq 1 60); do
             PRODUCT_IP=$(kubectl get svc product-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
             ORDER_IP=$(kubectl get svc order-service-w08e1 -n ecommerce -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -82,15 +76,15 @@ jobs:
           echo "PRODUCT_IP=$PRODUCT_IP" >> $GITHUB_ENV
           echo "ORDER_IP=$ORDER_IP" >> $GITHUB_ENV
 
-      - name: Capture Product Service IP
+      - name: Capture Product IP
         id: get_product_ip
         run: echo "external_ip=${{ env.PRODUCT_IP }}" >> $GITHUB_OUTPUT
 
-      - name: Capture Order Service IP
+      - name: Capture Order IP
         id: get_order_ip
         run: echo "external_ip=${{ env.ORDER_IP }}" >> $GITHUB_OUTPUT
 
-      - name: Logout from Azure
+      - name: Logout Azure
         if: always()
         run: az logout
 
@@ -100,8 +94,7 @@ jobs:
     environment: Production
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Log in to Azure
         uses: azure/login@v1
@@ -112,21 +105,19 @@ jobs:
         run: echo "ACR_NAME=${{ github.event.inputs.aks_acr_name }}" >> $GITHUB_ENV
 
       - name: Login to Azure Container Registry
-        run: az acr login --name $ACR_NAME
+        run: az acr login --name ${{ env.ACR_NAME }}
 
-      - name: Inject Backend IPs into Frontend main.js
+      - name: Inject Backend IPs
         run: |
           sed -i "s|_PRODUCT_API_URL_|http://${{ needs.deploy_backend.outputs.PRODUCT_API_IP }}:8000|g" frontend/main.js
           sed -i "s|_ORDER_API_URL_|http://${{ needs.deploy_backend.outputs.ORDER_API_IP }}:8001|g" frontend/main.js
-          echo "--- Modified main.js ---"
-          cat frontend/main.js
 
-      - name: Build and Push Frontend Image
+      - name: Build & Push Frontend Image
         run: |
-          docker build -t $ACR_NAME.azurecr.io/frontend:latest ./frontend/
-          docker push $ACR_NAME.azurecr.io/frontend:latest
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/frontend:latest ./frontend/
+          docker push ${{ env.ACR_NAME }}.azurecr.io/frontend:latest
 
-      - name: Set Kubernetes context (get AKS credentials)
+      - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
         with:
           resource-group: ${{ github.event.inputs.aks_resource_group }}
@@ -137,6 +128,6 @@ jobs:
           cd k8s/
           kubectl apply -f frontend.yaml
 
-      - name: Logout from Azure
+      - name: Logout Azure
         if: always()
         run: az logout
