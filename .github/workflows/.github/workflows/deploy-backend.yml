@@ -99,9 +99,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
 
-    env:
-      ACR_NAME: uroalsaadiweek09acr  # explicitly define your ACR here
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -110,6 +107,9 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set ACR name environment variable
+        run: echo "ACR_NAME=${{ github.event.inputs.aks_acr_name }}" >> $GITHUB_ENV
 
       - name: Login to Azure Container Registry
         run: az acr login --name $ACR_NAME
