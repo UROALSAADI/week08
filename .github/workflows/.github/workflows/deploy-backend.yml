@@ -93,10 +93,17 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Debug: Show ACR Name
-        run: echo "ACR Name: ${{ github.event.inputs.aks_acr_name }}"
+        run: |
+          echo "ACR Name: '${{ github.event.inputs.aks_acr_name }}'"
+          if [ -z "${{ github.event.inputs.aks_acr_name }}" ]; then
+            echo "Error: ACR name is empty!"
+            exit 1
+          fi
 
       - name: Login to Azure Container Registry
-        run: az acr login --name ${{ github.event.inputs.aks_acr_name }}
+        run: |
+          ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
+          az acr login --name "$ACR_NAME"
 
       - name: Inject Backend IPs
         run: |
@@ -105,8 +112,9 @@ jobs:
 
       - name: Build & Push Frontend Image
         run: |
-          docker build -t ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest ./frontend/
-          docker push ${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest
+          IMAGE="${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest"
+          docker build -t "$IMAGE" ./frontend/
+          docker push "$IMAGE"
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
