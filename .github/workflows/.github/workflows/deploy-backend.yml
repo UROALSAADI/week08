@@ -38,7 +38,9 @@ jobs:
 
       - name: Set Kubernetes context (get AKS credentials)
         run: |
-          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} --name ${{ github.event.inputs.aks_cluster_name }} --overwrite-existing
+          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} \
+                                 --name ${{ github.event.inputs.aks_cluster_name }} \
+                                 --overwrite-existing
 
       - name: Attach ACR to AKS
         run: |
@@ -89,7 +91,7 @@ jobs:
         run: echo "external_ip=${{ env.ORDER_IP }}" >> $GITHUB_OUTPUT
 
       - name: Logout from Azure
-        if: always()  # Prevent errors if no active session
+        if: always()
         run: az logout
 
   deploy_frontend:
