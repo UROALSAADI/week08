@@ -1,4 +1,4 @@
-
+# week08/.github/workflows/cd-deploy-aks.yml
 name: CD - Deploy Backend & Frontend to AKS
 
 on:
@@ -15,17 +15,16 @@ on:
       aks_acr_name:
         description: 'Name of ACR'
         required: true
-        default: 'uroalsaadiweek09acr'
+        default: 'uroalsaadiweek09acr'  # Your ACR name
 
 jobs:
   deploy_backend:
     runs-on: ubuntu-latest
     environment: Production
-
     outputs:
       PRODUCT_API_IP: ${{ steps.get_product_ip.outputs.external_ip }}
       ORDER_API_IP: ${{ steps.get_order_ip.outputs.external_ip }}
-      ACR_NAME: ${{ github.event.inputs.aks_acr_name }}
+      ACR_NAME: ${{ github.event.inputs.aks_acr_name }}  # Pass ACR to frontend
 
     steps:
       - name: Checkout repository
@@ -49,7 +48,7 @@ jobs:
                         --resource-group ${{ github.event.inputs.aks_resource_group }} \
                         --attach-acr ${{ github.event.inputs.aks_acr_name }}
 
-      - name: Deploy Backend Infrastructure
+      - name: Deploy Backend Infrastructure (Namespace, ConfigMaps, Secrets, Databases)
         run: |
           cd k8s/
           kubectl apply -f configmaps.yaml -n ecommerce
@@ -57,7 +56,7 @@ jobs:
           kubectl apply -f product-db.yaml -n ecommerce
           kubectl apply -f order-db.yaml -n ecommerce
 
-      - name: Deploy Backend Microservices
+      - name: Deploy Backend Microservices (Product, Order)
         run: |
           cd k8s/
           kubectl apply -f product-service.yaml -n ecommerce
@@ -74,10 +73,12 @@ jobs:
             fi
             sleep 5
           done
+
           if [[ -z "$PRODUCT_IP" || -z "$ORDER_IP" ]]; then
             echo "Error: LoadBalancer IPs not assigned after timeout."
             exit 1
           fi
+
           echo "PRODUCT_IP=$PRODUCT_IP" >> $GITHUB_ENV
           echo "ORDER_IP=$ORDER_IP" >> $GITHUB_ENV
 
@@ -98,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     env:
-      ACR_NAME: ${{ needs.deploy_backend.outputs.ACR_NAME }}
+      ACR_NAME: ${{ needs.deploy_backend.outputs.ACR_NAME }}  # <-- Fixed here
 
     steps:
       - name: Checkout repository
@@ -110,7 +111,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login to Azure Container Registry
-        run: az acr login --name $ACR_NAME
+        run: az acr login --name $ACR_NAME  # Now this has a proper value
 
       - name: Inject Backend IPs into Frontend main.js
         run: |
