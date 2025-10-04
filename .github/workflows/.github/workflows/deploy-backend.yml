@@ -1,90 +1,34 @@
-name: Backend CI - Build, Test, and Push to ACR
+name: Backend CI - Build and Push to ACR
 
 on:
   push:
-    branches: 
-      - main
-      - development
-  pull_request:
     branches:
       - main
-      - development
+  pull_request:
 
 jobs:
-  build:
-    name: Build Backend Services
+  build-and-push:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Log in to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Log in to ACR
+      - name: Log in to Azure Container Registry
         run: |
-          az acr login --name uroalsaadiweek09acr
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY_LOGIN_SERVER }} \
+            --username ${{ secrets.REGISTRY_USERNAME }} --password-stdin
 
-      - name: Build Docker images (order_service)
+      - name: Build and Push Order Service
         run: |
-          docker build -t uroalsaadiweek09acr.azurecr.io/orderservice:${{ github.sha }} ./backend/order_service
+          IMAGE_NAME=order_service
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/$IMAGE_NAME:$IMAGE_TAG ./backend/order_service
+          docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/$IMAGE_NAME:$IMAGE_TAG
 
-      - name: Build Docker images (product_service)
+      - name: Build and Push Product Service
         run: |
-          docker build -t uroalsaadiweek09acr.azurecr.io/productservice:${{ github.sha }} ./backend/product_service
-
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run unit tests for order_service
-        run: |
-          cd backend/order_service
-          # Replace with your real test command (e.g., pytest, npm test, etc.)
-          echo "Running tests for order_service"
-      
-      - name: Run unit tests for product_service
-        run: |
-          cd backend/product_service
-          # Replace with your real test command
-          echo "Running tests for product_service"
-
-  push:
-    name: Push Images to ACR
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Log in to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Log in to ACR
-        run: |
-          az acr login --name uroalsaadiweek09acr
-
-      - name: Push order_service image
-        run: |
-          docker push uroalsaadiweek09acr.azurecr.io/orderservice:${{ github.sha }}
-
-      - name: Push product_service image
-        run: |
-          docker push uroalsaadiweek09acr.azurecr.io/productservice:${{ github.sha }}
+          IMAGE_NAME=product_service
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/$IMAGE_NAME:$IMAGE_TAG ./backend/product_service
+          docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/$IMAGE_NAME:$IMAGE_TAG
