@@ -1,21 +1,13 @@
-# week08/.github/workflows/cd-deploy-aks.yml
+# .github/workflows/cd-deploy-aks.yml
 name: CD - Deploy Backend & Frontend to AKS
 
 on:
   workflow_dispatch:
-    inputs:
-      aks_cluster_name:
-        description: 'Name of the AKS Cluster to deploy to'
-        required: true
-        default: 'week09-aks'
-      aks_resource_group:
-        description: 'Resource Group of the AKS Cluster'
-        required: true
-        default: 'week09-rg'
-      aks_acr_name:
-        description: 'Name of ACR'
-        required: true
-        default: 'uroalsaadiweek09acr'
+
+env:
+  AKS_CLUSTER_NAME: week09-aks
+  AKS_RESOURCE_GROUP: week09-rg
+  ACR_NAME: uroalsaadiweek09acr
 
 jobs:
   deploy_backend:
@@ -36,8 +28,8 @@ jobs:
 
       - name: Set Kubernetes context
         run: |
-          az aks get-credentials --resource-group ${{ github.event.inputs.aks_resource_group }} \
-                                 --name ${{ github.event.inputs.aks_cluster_name }} \
+          az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} \
+                                 --name ${{ env.AKS_CLUSTER_NAME }} \
                                  --overwrite-existing
 
       - name: Deploy Backend
@@ -92,35 +84,17 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Debug: Show ACR Name
-        run: |
-          echo "ACR Name: '${{ github.event.inputs.aks_acr_name }}'"
-          if [ -z "${{ github.event.inputs.aks_acr_name }}" ]; then
-            echo "Error: ACR name is empty!"
-            exit 1
-          fi
-
-      - name: Login to Azure Container Registry
-        run: |
-          ACR_NAME="${{ github.event.inputs.aks_acr_name }}"
-          az acr login --name "$ACR_NAME"
-
-      - name: Inject Backend IPs
-        run: |
-          sed -i "s|_PRODUCT_API_URL_|http://${{ needs.deploy_backend.outputs.PRODUCT_API_IP }}:8000|g" frontend/main.js
-          sed -i "s|_ORDER_API_URL_|http://${{ needs.deploy_backend.outputs.ORDER_API_IP }}:8001|g" frontend/main.js
-
       - name: Build & Push Frontend Image
         run: |
-          IMAGE="${{ github.event.inputs.aks_acr_name }}.azurecr.io/frontend:latest"
-          docker build -t "$IMAGE" ./frontend/
-          docker push "$IMAGE"
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/frontend:latest ./frontend/
+          az acr login --name ${{ env.ACR_NAME }}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context
         uses: azure/aks-set-context@v3
         with:
-          resource-group: ${{ github.event.inputs.aks_resource_group }}
-          cluster-name: ${{ github.event.inputs.aks_cluster_name }}
+          resource-group: ${{ env.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
 
       - name: Deploy Frontend to AKS
         run: |
