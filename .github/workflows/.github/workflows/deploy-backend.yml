@@ -1,7 +1,10 @@
-# .github/workflows/cd-deploy-aks.yml
-name: CD - Deploy Backend & Frontend to AKS
+# .github/workflows/ci-cd-aks.yml
+name: CI/CD - Build, Push & Deploy to AKS
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -10,7 +13,43 @@ env:
   ACR_NAME: uroalsaadiweek09acr
 
 jobs:
+  # =======================
+  # 1. Backend CI Job
+  # =======================
+  backend_ci:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build & Push Product Service
+        run: |
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/product-service:latest ./product-service
+          docker push ${{ env.ACR_NAME }}.azurecr.io/product-service:latest
+
+      - name: Build & Push Order Service
+        run: |
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/order-service:latest ./order-service
+          docker push ${{ env.ACR_NAME }}.azurecr.io/order-service:latest
+
+      - name: Logout Azure
+        if: always()
+        run: az logout
+
+  # =======================
+  # 2. Deploy Backend to AKS
+  # =======================
   deploy_backend:
+    needs: backend_ci
     runs-on: ubuntu-latest
     environment: Production
 
@@ -32,7 +71,7 @@ jobs:
                                  --name ${{ env.AKS_CLUSTER_NAME }} \
                                  --overwrite-existing
 
-      - name: Deploy Backend
+      - name: Deploy Backend to AKS
         run: |
           cd k8s/
           kubectl apply -f configmaps.yaml -n ecommerce
@@ -71,6 +110,9 @@ jobs:
         if: always()
         run: az logout
 
+  # =======================
+  # 3. Deploy Frontend to AKS
+  # =======================
   deploy_frontend:
     needs: deploy_backend
     runs-on: ubuntu-latest
@@ -84,10 +126,19 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Log in to ACR
+        run: |
+          echo "Logging into ACR: ${{ env.ACR_NAME }}"
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Inject Backend IPs into Frontend
+        run: |
+          sed -i "s|_PRODUCT_API_URL_|http://${{ needs.deploy_backend.outputs.PRODUCT_API_IP }}:8000|g" frontend/main.js
+          sed -i "s|_ORDER_API_URL_|http://${{ needs.deploy_backend.outputs.ORDER_API_IP }}:8001|g" frontend/main.js
+
       - name: Build & Push Frontend Image
         run: |
           docker build -t ${{ env.ACR_NAME }}.azurecr.io/frontend:latest ./frontend/
-          az acr login --name ${{ env.ACR_NAME }}
           docker push ${{ env.ACR_NAME }}.azurecr.io/frontend:latest
 
       - name: Set Kubernetes context
